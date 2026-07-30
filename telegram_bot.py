@@ -28,7 +28,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 import config
 from paper_engine import PaperPortfolio, ExitReason
 from portfolio_store import save_portfolio, load_portfolio
-from price_source import get_current_price
+from price_source import get_current_price, get_token_info
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 log = logging.getLogger("telegram_bot")
@@ -52,8 +52,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Paper trading bot ready. No real money moves here — this is for "
         "testing your strategy risk-free.\n\n"
         "/balance — current balance\n"
-        "/setbalance <amount> — reset your paper balance\n"
-        "/enter <token_address> <symbol> [stake_pct] — paper-buy at current price\n"
+        "/addbalance <amount> — top up funds, keeps positions/history\n"
+        "/setbalance <amount> — full reset, WIPES positions/history too\n"
+        "/enter <token_address> [symbol] [stake_pct] — paper-buy, symbol "
+        "auto-detected if you skip it (e.g. /enter <address> or "
+        "/enter <address> 0.03 for 3% stake, or /enter <address> DOGE2 0.03)\n"
         "/positions — see open positions\n"
         "/close <token_address> — manually close early\n"
         "/history — recent closed trades"
@@ -67,6 +70,25 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Balance: {portfolio.balance:,.2f}\n"
         f"Open positions: {len(portfolio.open_positions)}\n"
         f"Total equity (balance + stake locked in open trades): {portfolio.total_equity:,.2f}"
+    )
+
+
+async def addbalance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /addbalance 500")
+        return
+    try:
+        amount = float(context.args[0])
+    except ValueError:
+        await update.message.reply_text("That doesn't look like a number.")
+        return
+    portfolio.balance += amount
+    _persist()
+    await update.message.reply_text(
+        f"Added {amount:,.2f}. New balance: {portfolio.balance:,.2f}\n"
+        f"(Open positions and trade history untouched.)"
     )
 
 
@@ -90,21 +112,44 @@ async def setbalance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def enter_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
-    if len(context.args) < 2:
-        await update.message.reply_text("Usage: /enter <token_address> <symbol> [stake_pct]")
+    if not context.args:
+        await update.message.reply_text("Usage: /enter <token_address> [symbol] [stake_pct]")
         return
 
-    token_address, symbol = context.args[0], context.args[1]
-    stake_pct = float(context.args[2]) if len(context.args) > 2 else config.DEFAULT_STAKE_PCT
+    token_address = context.args[0]
+
+    # symbol is now optional — auto-detected from DEXScreener if you don't
+    # type one. If your second argument looks like a number, treat it as
+    # stake_pct instead of a symbol (handles "/enter <address> 0.05").
+    remaining = context.args[1:]
+    manual_symbol = None
+    stake_pct = config.DEFAULT_STAKE_PCT
+
+    if remaining:
+        first = remaining[0]
+        try:
+            stake_pct = float(first)
+            remaining = remaining[1:]
+        except ValueError:
+            manual_symbol = first
+            remaining = remaining[1:]
+            if remaining:
+                try:
+                    stake_pct = float(remaining[0])
+                except ValueError:
+                    pass
 
     if token_address in portfolio.open_positions or token_address in portfolio.pending_entries:
-        await update.message.reply_text(f"Already watching or holding a position in {symbol}.")
+        await update.message.reply_text("Already watching or holding a position in that token.")
         return
 
-    price = get_current_price(token_address)
-    if price is None:
-        await update.message.reply_text("Couldn't fetch a live price for that token right now — try again shortly.")
+    info = get_token_info(token_address)
+    if info is None:
+        await update.message.reply_text("Couldn't fetch live data for that token right now — try again shortly.")
         return
+
+    symbol = manual_symbol or info["symbol"]
+    price = info["price"]
 
     try:
         portfolio.start_watching(token_address, symbol, price, stake_pct)
@@ -217,6 +262,7 @@ def build_app() -> Application:
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("balance", balance_cmd))
+    app.add_handler(CommandHandler("addbalance", addbalance_cmd))
     app.add_handler(CommandHandler("setbalance", setbalance_cmd))
     app.add_handler(CommandHandler("enter", enter_cmd))
     app.add_handler(CommandHandler("cancel", cancel_cmd))
