@@ -41,6 +41,15 @@ class _KeepAliveHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"Paper trading bot is alive")
 
+    def do_HEAD(self):
+        # UptimeRobot (and most uptime monitors) use HEAD requests by
+        # default, not GET — without this, the server correctly responds
+        # "501 Not Implemented" to every single check, since it genuinely
+        # didn't know how to answer a HEAD request at all. This was the
+        # actual bug behind the persistent "down" status.
+        self.send_response(200)
+        self.end_headers()
+
     def log_message(self, format, *args):
         pass  # silence default request logging, keeps the real logs readable
 
@@ -120,7 +129,7 @@ def main():
         "Paper trading bot starting. Balance=%.2f, checking prices every %ds",
         telegram_bot.portfolio.balance, config.PRICE_CHECK_INTERVAL_SECONDS,
     )
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
