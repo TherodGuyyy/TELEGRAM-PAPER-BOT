@@ -67,9 +67,9 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
     await update.message.reply_text(
-        f"Balance: {portfolio.balance:,.2f}\n"
+        f"Balance: ${portfolio.balance:,.2f}\n"
         f"Open positions: {len(portfolio.open_positions)}\n"
-        f"Total equity (balance + stake locked in open trades): {portfolio.total_equity:,.2f}"
+        f"Total equity (balance + stake locked in open trades): ${portfolio.total_equity:,.2f}"
     )
 
 
@@ -87,7 +87,7 @@ async def addbalance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     portfolio.balance += amount
     _persist()
     await update.message.reply_text(
-        f"Added {amount:,.2f}. New balance: {portfolio.balance:,.2f}\n"
+        f"Added ${amount:,.2f}. New balance: ${portfolio.balance:,.2f}\n"
         f"(Open positions and trade history untouched.)"
     )
 
@@ -106,7 +106,7 @@ async def setbalance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global portfolio
     portfolio = PaperPortfolio(starting_balance=amount)
     _persist()
-    await update.message.reply_text(f"Paper balance reset to {amount:,.2f}. All open/closed history cleared.")
+    await update.message.reply_text(f"Paper balance reset to ${amount:,.2f}. All open/closed history cleared.")
 
 
 async def enter_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -236,7 +236,7 @@ def _format_close_message(position) -> str:
         f"{emoji} Closed {position.symbol}\n"
         f"Entry: {position.entry_price:.8f}  →  Exit: {position.exit_price:.8f}\n"
         f"Result: {position.realized_multiple:.2f}x  ({position.exit_reason.value})\n"
-        f"PnL: {position.pnl:+,.2f}  |  Balance: {portfolio.balance:,.2f}"
+        f"PnL: ${position.pnl:+,.2f}  |  Balance: ${portfolio.balance:,.2f}"
     )
 
 
@@ -250,9 +250,9 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["Recent closed trades:"]
     for p in recent:
         emoji = "🟢" if p.pnl >= 0 else "🔴"
-        lines.append(f"  {emoji} {p.symbol}: {p.realized_multiple:.2f}x, PnL {p.pnl:+,.2f} ({p.exit_reason.value})")
+        lines.append(f"  {emoji} {p.symbol}: {p.realized_multiple:.2f}x, PnL ${p.pnl:+,.2f} ({p.exit_reason.value})")
     total_pnl = sum(p.pnl for p in portfolio.closed_positions)
-    lines.append(f"\nAll-time realized PnL: {total_pnl:+,.2f}")
+    lines.append(f"\nAll-time realized PnL: ${total_pnl:+,.2f}")
     await update.message.reply_text("\n".join(lines))
 
 

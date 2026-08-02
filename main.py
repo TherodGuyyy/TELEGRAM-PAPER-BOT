@@ -92,7 +92,7 @@ async def check_positions_job(context: ContextTypes.DEFAULT_TYPE):
             position = result
             reason_text = "post-alert dip" if position.entry_reason.value == "dip_in_range" else "15-min timeout (never dipped)"
             await _notify(context, f"✅ Entered {symbol} at {position.entry_price:.8f} ({reason_text})\n"
-                                    f"Stake: {position.stake:,.2f} | Balance: {portfolio.balance:,.2f}")
+                                    f"Stake: ${position.stake:,.2f} | Balance: ${portfolio.balance:,.2f}")
 
     # --- Check open positions (waiting for 2.2x or 3x) ---
     for token_address in list(portfolio.open_positions.keys()):
