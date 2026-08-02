@@ -47,7 +47,14 @@ class _KeepAliveHandler(BaseHTTPRequestHandler):
 
 def _start_keep_alive_server():
     port = int(os.getenv("PORT", 8080))  # Render sets PORT automatically
-    server = HTTPServer(("0.0.0.0", port), _KeepAliveHandler)
+    try:
+        server = HTTPServer(("0.0.0.0", port), _KeepAliveHandler)
+    except OSError as e:
+        # Make this impossible to miss — if the port's already in use or
+        # can't be bound for any reason, say so loudly rather than letting
+        # a daemon thread die quietly with no clear log trace.
+        log.error("KEEP-ALIVE SERVER FAILED TO START on port %d: %s", port, e)
+        return
     log.info("Keep-alive web server listening on port %d", port)
     server.serve_forever()
 
